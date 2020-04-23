@@ -1,6 +1,5 @@
 # Rough Encephalic Sex on the Moon
-## Lua Brainfuck
+
+(Lua is Portugese for Luna (id est, the Moon))
 
 A Brainfuck interpreter with an unbounded memory tape (in both directions) containing unsigned over-and-underflowing 8-bit integers (id est, `x % 256 == x`).
-
-Made to run in LÖVE.

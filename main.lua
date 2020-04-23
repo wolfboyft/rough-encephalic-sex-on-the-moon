@@ -1,22 +1,33 @@
-local program, programPointer
-local memory, memoryPointer
-local loops
+do -- Monkeypatches
+	function assertl(value, message, level)
+		message = message or "Assertion failed!"
+		if not value then
+			error(message, level)
+		end
+		return value
+	end
 
-function love.load(args)
-	local filename = assert(args[1], "No program to run!")
-	program, message = love.filesystem.read(filename)
-	assert(program, message)
-	programPointer = 1
-	memory, memoryPointer = {}, 0
-	
-	loops = {}
+	function io.size(file)
+		local pos = file:seek()
+		local size = file:seek("end")
+		file:seek("set", pos)
+		return size
+	end
+end
+
+local filename = assertl(select(1, ...), "No program to run!", 0)
+local program = assertl(io.open(filename), "Program not found.", 0)
+
+local loops = {}
+do -- Preprocess square brackets
 	local loopStack, line, col = {}, 1, 1
-	for i = 1, #program do
-		local char = program:sub(i, i)
+	repeat
+		local i = program:seek()
+		local char = program:read(1)
 		if char == "[" then
 			table.insert(loopStack, i)
 		elseif char == "]" then
-			local j = assert(table.remove(loopStack), "Unexpected ] at line " .. line .. ", col " .. col)
+			local j = assertl(table.remove(loopStack), "Unexpected ] at line " .. line .. ", col " .. col, 0)
 			loops[i], loops[j] = j, i
 		end
 		if char == "\n" then
@@ -25,37 +36,40 @@ function love.load(args)
 		else
 			col = col + 1
 		end
-	end
+	until char == nil
 	local remaining = table.remove(loopStack)
 	if remaining then
-		error("Expected ] at EOF to close [ at " .. remaining)
+		error("Expected ] at EOF to close [ at " .. remaining, 0)
 	end
 end
 
-function love.update()
-	local char = program:sub(programPointer, programPointer)
-	local valueAtPointer = memory[memoryPointer] or 0
+local memory, pointer = {}, 0
+local programLength = program:seek("end")
+program:seek("set")
+repeat
+	local valueAtPointer = memory[pointer] or 0
+
+	local pos = program:seek()
+	local char = program:read(1)
 	if char == ">" then
-		memoryPointer = memoryPointer + 1
+		pointer = pointer + 1
 	elseif char == "<" then
-		memoryPointer = memoryPointer - 1
+		pointer = pointer - 1
 	elseif char == "+" then
-		memory[memoryPointer] = (valueAtPointer + 1) % 256
+		memory[pointer] = (valueAtPointer + 1) % 256
 	elseif char == "-" then
-		memory[memoryPointer] = (valueAtPointer - 1) % 256
+		memory[pointer] = (valueAtPointer - 1) % 256
 	elseif char == "." then
 		io.write(string.char(valueAtPointer))
 	elseif char == "," then
-		memory[memoryPointer] = string.byte(io.read(1))
+		memory[pointer] = string.byte(io.read(1))
 	elseif char == "[" then
 		if valueAtPointer == 0 then
-			programPointer = loops[programPointer]
+			program:seek("set", loops[pos])
 		end
 	elseif char == "]" then
 		if valueAtPointer ~= 0 then
-			programPointer = loops[programPointer]
+			program:seek("set", loops[pos])
 		end
 	end
-	
-	programPointer = programPointer + 1
-end
+until char == nil
